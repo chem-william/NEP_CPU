@@ -85,9 +85,14 @@ void PairNEP::coeff(int narg, char** arg)
 
 void PairNEP::settings(int narg, char** arg)
 {
-  if (narg != 1)
+  if (narg != 5)
     error->all(FLERR, "Illegal pair_style command");
+
   strcpy(model_filename, arg[0]);
+  look_back = utils::numeric(FLERR, arg[1], false, lmp);
+  lags = utils::numeric(FLERR, arg[2], false, lmp);
+  eigvals_to_keep = utils::numeric(FLERR, arg[3], false, lmp);
+  alpha = utils::numeric(FLERR, arg[4], false, lmp);
 }
 
 void PairNEP::init_style()

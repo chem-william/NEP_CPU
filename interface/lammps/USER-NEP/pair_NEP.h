@@ -46,6 +46,11 @@ protected:
   char model_filename[1000];
   double cutoffsq;
   void allocate();
+
+  int look_back;
+  int lags;
+  int eigvals_to_keep;
+  double alpha;
 };
 } // namespace LAMMPS_NS
 
