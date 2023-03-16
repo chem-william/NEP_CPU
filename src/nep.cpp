@@ -1207,89 +1207,82 @@ void find_descriptor_for_lammps(
     int t1 = g_type[n1] - 1; // from LAMMPS to NEP convention
     double q[MAX_DIM] = {0.0};
 
+    double positions[g_NN[n1]*3] = {0.0};
+    double distances_sq[g_NN[n1]] = {0.0};
+    double distances_sqrt[g_NN[n1]] = {0.0};
     for (int i1 = 0; i1 < g_NN[n1]; ++i1) {
       int n2 = g_NL[n1][i1];
-      double r12[3] = {
-        g_pos[n2][0] - g_pos[n1][0], g_pos[n2][1] - g_pos[n1][1], g_pos[n2][2] - g_pos[n1][2]};
+      positions[i1*3 + 0] = g_pos[n2][0] - g_pos[n1][0];
+      positions[i1*3 + 1] = g_pos[n2][1] - g_pos[n1][1];
+      positions[i1*3 + 2] = g_pos[n2][2] - g_pos[n1][2];
 
-      double d12sq = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
+      double d12sq = (
+        positions[i1*3 + 0] * positions[i1*3 + 0]
+        + positions[i1*3 + 1] * positions[i1*3 + 1]
+        + positions[i1*3 + 2] * positions[i1*3 + 2]
+      );
+      distances_sq[i1] = d12sq;
       if (d12sq >= paramb.rc_radial * paramb.rc_radial) {
         continue;
       }
       double d12 = sqrt(d12sq);
+      distances_sqrt[i1] = d12;
 
       double fc12;
       find_fc(paramb.rc_radial, paramb.rcinv_radial, d12, fc12);
       int t2 = g_type[n2] - 1; // from LAMMPS to NEP convention
       double fn12[MAX_NUM_N];
-      if (paramb.version == 2) {
-        find_fn(paramb.n_max_radial, paramb.rcinv_radial, d12, fc12, fn12);
-        for (int n = 0; n <= paramb.n_max_radial; ++n) {
-          double c = (paramb.num_types == 1)
-                       ? 1.0
-                       : annmb.c[(n * paramb.num_types + t1) * paramb.num_types + t2];
-          q[n] += fn12[n] * c;
+      find_fn(paramb.basis_size_radial, paramb.rcinv_radial, d12, fc12, fn12);
+      for (int n = 0; n <= paramb.n_max_radial; ++n) {
+        double gn12 = 0.0;
+        for (int k = 0; k <= paramb.basis_size_radial; ++k) {
+          int c_index = (n * (paramb.basis_size_radial + 1) + k) * paramb.num_types_sq;
+          c_index += t1 * paramb.num_types + t2;
+          gn12 += fn12[k] * annmb.c[c_index];
         }
-      } else {
-        find_fn(paramb.basis_size_radial, paramb.rcinv_radial, d12, fc12, fn12);
-        for (int n = 0; n <= paramb.n_max_radial; ++n) {
-          double gn12 = 0.0;
-          for (int k = 0; k <= paramb.basis_size_radial; ++k) {
-            int c_index = (n * (paramb.basis_size_radial + 1) + k) * paramb.num_types_sq;
-            c_index += t1 * paramb.num_types + t2;
-            gn12 += fn12[k] * annmb.c[c_index];
-          }
-          q[n] += gn12;
+        q[n] += gn12;
+      }
+    }
+
+    double s[(paramb.n_max_angular + 1)*NUM_OF_ABC] = {0.0};
+    for (int i1 = 0; i1 < g_NN[n1]; ++i1) {
+      int n2 = g_NL[n1][i1];
+      int t2 = g_type[n2] - 1; // from LAMMPS to NEP convention
+
+      double d12sq = distances_sq[i1];
+      if (d12sq >= paramb.rc_angular * paramb.rc_angular) {
+        continue;
+      }
+      double d12 = distances_sqrt[i1];
+      double fc12;
+      find_fc(paramb.rc_angular, paramb.rcinv_angular, d12, fc12);
+
+      double fn12[MAX_NUM_N];
+      find_fn(paramb.basis_size_angular, paramb.rcinv_angular, d12, fc12, fn12);
+
+      for (int n = 0; n <= paramb.n_max_angular; ++n) {
+        double gn12 = 0.0;
+        for (int k = 0; k <= paramb.basis_size_angular; ++k) {
+          int c_index = (n * (paramb.basis_size_angular + 1) + k) * paramb.num_types_sq;
+          c_index += t1 * paramb.num_types + t2 + paramb.num_c_radial;
+          gn12 += fn12[k] * annmb.c[c_index];
         }
+        accumulate_s(
+	  d12, positions[i1*3 + 0], positions[i1*3 + 1], positions[i1*3 + 2], gn12, s + n*NUM_OF_ABC
+	);
       }
     }
 
     for (int n = 0; n <= paramb.n_max_angular; ++n) {
-      double s[NUM_OF_ABC] = {0.0};
-      for (int i1 = 0; i1 < g_NN[n1]; ++i1) {
-        int n2 = g_NL[n1][i1];
-        double r12[3] = {
-          g_pos[n2][0] - g_pos[n1][0], g_pos[n2][1] - g_pos[n1][1], g_pos[n2][2] - g_pos[n1][2]};
-
-        double d12sq = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
-        if (d12sq >= paramb.rc_angular * paramb.rc_angular) {
-          continue;
-        }
-        double d12 = sqrt(d12sq);
-
-        double fc12;
-        find_fc(paramb.rc_angular, paramb.rcinv_angular, d12, fc12);
-        int t2 = g_type[n2] - 1; // from LAMMPS to NEP convention
-        if (paramb.version == 2) {
-          double fn;
-          find_fn(n, paramb.rcinv_angular, d12, fc12, fn);
-          fn *=
-            (paramb.num_types == 1)
-              ? 1.0
-              : annmb.c
-                  [((paramb.n_max_radial + 1 + n) * paramb.num_types + t1) * paramb.num_types + t2];
-          accumulate_s(d12, r12[0], r12[1], r12[2], fn, s);
-        } else {
-          double fn12[MAX_NUM_N];
-          find_fn(paramb.basis_size_angular, paramb.rcinv_angular, d12, fc12, fn12);
-          double gn12 = 0.0;
-          for (int k = 0; k <= paramb.basis_size_angular; ++k) {
-            int c_index = (n * (paramb.basis_size_angular + 1) + k) * paramb.num_types_sq;
-            c_index += t1 * paramb.num_types + t2 + paramb.num_c_radial;
-            gn12 += fn12[k] * annmb.c[c_index];
-          }
-          accumulate_s(d12, r12[0], r12[1], r12[2], gn12, s);
-        }
-      }
       if (paramb.num_L == paramb.L_max) {
-        find_q(paramb.n_max_angular + 1, n, s, q + (paramb.n_max_radial + 1));
+        find_q(paramb.n_max_angular + 1, n, s + n*NUM_OF_ABC, q + (paramb.n_max_radial + 1));
       } else if (paramb.num_L == paramb.L_max + 1) {
-        find_q_with_4body(paramb.n_max_angular + 1, n, s, q + (paramb.n_max_radial + 1));
+        find_q_with_4body(paramb.n_max_angular + 1, n, s + n*NUM_OF_ABC, q + (paramb.n_max_radial + 1));
       } else {
-        find_q_with_5body(paramb.n_max_angular + 1, n, s, q + (paramb.n_max_radial + 1));
+        find_q_with_5body(paramb.n_max_angular + 1, n, s + n*NUM_OF_ABC, q + (paramb.n_max_radial + 1));
       }
       for (int abc = 0; abc < NUM_OF_ABC; ++abc) {
-        g_sum_fxyz[(n * NUM_OF_ABC + abc) * N + n1] = s[abc];
+        g_sum_fxyz[(n * NUM_OF_ABC + abc) * N + n1] = s[n*NUM_OF_ABC + abc];
       }
     }
 
@@ -1297,10 +1290,10 @@ void find_descriptor_for_lammps(
       q[d] = q[d] * paramb.q_scaler[d];
     }
 
+
     double F = 0.0, Fp[MAX_DIM] = {0.0};
     apply_ann_one_layer(
-      annmb.dim, annmb.num_neurons1, annmb.w0[t1], annmb.b0[t1], annmb.w1[t1], annmb.b1, q, F, Fp
-    );
+      annmb.dim, annmb.num_neurons1, annmb.w0[t1], annmb.b0[t1], annmb.w1[t1], annmb.b1, q, F, Fp);
 
     g_total_potential += F; // always calculate this
     if (g_potential) {      // only calculate when required
