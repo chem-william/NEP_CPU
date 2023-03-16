@@ -70,8 +70,7 @@ void apply_ann_one_layer(
   const double* b1,
   double* q,
   double& energy,
-  double* energy_derivative,
-  double* latent_space)
+  double* energy_derivative)
 {
   for (int n = 0; n < num_neurons1; ++n) {
     double w0_times_q = 0.0;
@@ -79,7 +78,6 @@ void apply_ann_one_layer(
       w0_times_q += w0[n * dim + d] * q[d];
     }
     double x1 = tanh(w0_times_q - b0[n]);
-    latent_space[n] = w1[n] * x1; // also try x1
     energy += w1[n] * x1;
     for (int d = 0; d < dim; ++d) {
       double y1 = (1.0 - x1 * x1) * w0[n * dim + d];
@@ -909,16 +907,10 @@ void find_descriptor_small_box(
         q[d] = q[d] * paramb.q_scaler[d];
       }
 
-      double F = 0.0, Fp[MAX_DIM] = {0.0}, latent_space[MAX_NEURON] = {0.0};
+      double F = 0.0, Fp[MAX_DIM] = {0.0};
       apply_ann_one_layer(
-        annmb.dim, annmb.num_neurons1, annmb.w0[t1], annmb.b0[t1], annmb.w1[t1], annmb.b1, q, F, Fp,
-        latent_space);
-
-      if (calculating_latent_space) {
-        for (int n = 0; n < annmb.num_neurons1; ++n) {
-          g_latent_space[n * N + n1] = latent_space[n];
-        }
-      }
+        annmb.dim, annmb.num_neurons1, annmb.w0[t1], annmb.b0[t1], annmb.w1[t1], annmb.b1, q, F, Fp
+      );
 
       if (calculating_potential) {
         g_potential[n1] += F;
@@ -1305,10 +1297,10 @@ void find_descriptor_for_lammps(
       q[d] = q[d] * paramb.q_scaler[d];
     }
 
-    double F = 0.0, Fp[MAX_DIM] = {0.0}, latent_space[MAX_NEURON] = {0.0};
+    double F = 0.0, Fp[MAX_DIM] = {0.0};
     apply_ann_one_layer(
-      annmb.dim, annmb.num_neurons1, annmb.w0[t1], annmb.b0[t1], annmb.w1[t1], annmb.b1, q, F, Fp,
-      latent_space);
+      annmb.dim, annmb.num_neurons1, annmb.w0[t1], annmb.b0[t1], annmb.w1[t1], annmb.b1, q, F, Fp
+    );
 
     g_total_potential += F; // always calculate this
     if (g_potential) {      // only calculate when required
