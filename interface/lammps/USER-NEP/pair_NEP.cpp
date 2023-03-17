@@ -234,23 +234,20 @@ void PairNEP::compute(int eflag, int vflag)
         // nobs = look_back
         for (int t = lags; t < look_back; ++t) {
           int t_minus_lags = t - lags;
-          z.row(t_minus_lags) = catted_vals
+          MatrixXf tmp = catted_vals
             .middleRows(t_minus_lags, lags)
-            .leftCols(inum * 3)(row_indices, col_indices)
-            .reshaped<RowMajor>()
-            .transpose()
-            .eval();
+            .leftCols(inum * 3)(row_indices, col_indices);
+          tmp.transposeInPlace();
+          Map<const VectorXf, Aligned> tmp_map(tmp.data(), tmp.size());
+          z.row(t_minus_lags) = tmp_map;
         }
         MatrixXf y_sample = catted_vals.bottomRows(look_back - lags).leftCols(inum*3);
     
         BDCSVD<MatrixXf> svd = z.bdcSvd(ComputeThinU | ComputeThinV);
         VectorXf s = svd.singularValues()(seq(0, eigvals_to_keep - 1));
-        // VectorXd s = svd.singularValues();
-        // int r = s.rows();
-        // double alpha = 1e-7;
         MatrixXf D = s.cwiseQuotient((s.array().square() + alpha).matrix()).asDiagonal();
         MatrixXf params = svd.matrixV().leftCols(eigvals_to_keep) * D * svd.matrixU().transpose().topRows(eigvals_to_keep) * y_sample;
-        VectorXf coefs = params.reshaped<ColMajor>().transpose().eval();
+        VectorXf coefs = params.reshaped<ColMajor>();
         preds = PairNEP::forecast(catted_vals, coefs, look_back, lags);
       }
     }
