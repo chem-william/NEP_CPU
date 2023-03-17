@@ -25,6 +25,7 @@ PairStyle(nep, PairNEP)
 #include "nep.h"
 #include "pair.h"
 #include <string>
+#include <Eigen/Dense>
 
 namespace LAMMPS_NS
 {
@@ -32,6 +33,13 @@ class PairNEP : public Pair
 {
 public:
   double cutoff;
+  Eigen::MatrixXf z;
+  Eigen::MatrixXf y_sample;
+  Eigen::MatrixXf preds;
+  Eigen::MatrixXf catted_vals;
+  Eigen::ArrayXi row_indices;
+  Eigen::ArrayXi col_indices;
+
   NEP3 nep_model;
   PairNEP(class LAMMPS*);
   virtual ~PairNEP();
@@ -40,6 +48,9 @@ public:
   virtual double init_one(int, int);
   virtual void init_style();
   virtual void compute(int, int);
+
+  Eigen::MatrixXf forecast(const Eigen::MatrixXf &, const Eigen::VectorXf &, const int, const int);
+  void setup() override;
 
 protected:
   bool inited;
@@ -51,6 +62,8 @@ protected:
   int lags;
   int eigvals_to_keep;
   double alpha;
+  bool calc_true_forces = true;
+  int global_forces_saved = 0;
 };
 } // namespace LAMMPS_NS
 
